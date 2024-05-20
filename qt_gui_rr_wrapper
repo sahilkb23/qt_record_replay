@@ -1,0 +1,50 @@
+#!/bin/sh
+scriptName=`basename $0`
+file=$1
+shift
+cmd=$@
+
+export RR_QT_GUI_OPTIONS="USE_MODEL_DATA_FOR_TREE_VIEW,SHOW_IGNORED_EVENTS=false"
+if [ $scriptName == "record_qt_gui" ]; then 
+    message="Recording test "
+    export LOG_QT_SO=$file
+    unset REPLAY_QT_SO
+else if [ $scriptName == "replay_qt_gui" ]; then 
+    message="Replaying test "
+    export REPLAY_QT_SO=$file
+    unset LOG_QT_SO
+else
+    echo "Script not supposed to be called directly"
+    exit 1
+fi
+fi
+
+if [[ -z "$file" || -z "$cmd" ]]; then
+    echo "Usage $scriptName <file> <command>"
+    exit 1
+fi
+
+LIBRARY=${LIB_QT_RECORD_REPLAY}
+if [ -z "$LIBRARY" ]; then
+    if [ ! -z "${REGRESSION_SCRIPTS_DIR}" ]; then 
+        EXTERNAL_LIB_PATH="${REGRESSION_SCRIPTS_DIR}/../../../external/lib"
+    else
+        EXTERNAL_LIB_PATH="/home/rgr/trunk/external/lib"
+    fi
+    LIBRARY="${EXTERNAL_LIB_PATH}/qt_replay_record/libqtrr.so"
+    RH_MAJOR_VERSION=`lsb_release -s  -r | sed "s/\..*//g"`
+    RHLIBPATH="${EXTERNAL_LIB_PATH}/RHEL${RH_MAJOR_VERSION}.0-64"
+    export LD_LIBRARY_PATH="${RHLIBPATH}:${LD_LIBRARY_PATH}"
+fi
+if [ -f "$LIBRARY" ]; 
+then 
+    echo $message $file
+    echo "Preloading $LIBRARY"
+    echo "Executing $cmd"
+    export LD_PRELOAD="$LIBRARY"
+    eval $cmd
+else
+    echo "Could not find $LIBRARY"
+    exit 2
+fi
+
