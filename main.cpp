@@ -543,12 +543,31 @@ std::list<QEvent*> QEventObj::createQEventList(QObject *&obj)
     {
         int x= eventDataMap["X"].toInt();
         int y = eventDataMap["Y"].toInt();
+        QAbstractItemView *v = getAbstractView(obj);
+        if(eventDataMap.find("ModelIndex") != eventDataMap.end() || eventDataMap.find("ModelData") != eventDataMap.end())
+        {
+            QModelIndex *idx = (eventDataMap.find("ModelIndex") != eventDataMap.end())?QModelIndexFromStr(v, eventDataMap["ModelIndex"]):QModelIndexFromDataStr(v, eventDataMap["ModelData"]);
+            if(idx && idx->isValid())
+            {
+                int dx = eventDataMap[QString("dx")].toInt();
+                int dy = eventDataMap[QString("dy")].toInt();
+                QTreeView *tv = qobject_cast<QTreeView*>(v);
+                if(tv){
+                    //std::cerr<<"Expanding tree view\n";
+                    tv->expand(*idx);
+                }
+                v->scrollTo(*idx);
+                QRect rect = v->visualRect(*idx);
+                x = rect.x()+dx;
+                y = rect.y()+dy;
+            }
+        }
         QPoint l_pos(x, y);
-        QPoint g_pos = qobject_cast<QWidget*>(obj)->mapToGlobal(l_pos); //Necessary for QMenu atleast
+        QPoint g_pos = v->viewport()->mapToGlobal(l_pos); //Necessary for QMenu atleast
         QContextMenuEvent::Reason reason = (QContextMenuEvent::Reason)eventDataMap["Reason"].toInt();
         QCursor::setPos(g_pos);
         usleep(100);
-        eventList.push_back(new QContextMenuEvent(reason, g_pos));
+        eventList.push_back(new QContextMenuEvent(reason, l_pos, g_pos));
     }
     else if (eventName == "ComboSelectionChange")
     {
@@ -746,6 +765,44 @@ void addDelayEventToList(std::list<QEventObj*> &eventsList, int secs)
     eventsList.push_back(delayEvent);
 }
 
+bool fillModelIndexInfoForViewEvents(QObject *obj, QPoint pos, std::map<QString, QString> &paramValues){
+    QAbstractItemView *v = getAbstractView(obj);
+    if(!v) return false;
+    QModelIndex idx = v->indexAt(pos);
+    bool dataFilled = false;
+    if(idx.isValid())
+    {
+        static bool useModelDataForTreeView = (toolOptions["USE_MODEL_DATA_FOR_TREE_VIEW"] == "true")?true:false;
+        if(qobject_cast<QTreeView*>(v) && useModelDataForTreeView)
+            paramValues["ModelData"] = QModelIndexToDataString(idx);
+        else
+            paramValues["ModelIndex"] = QModelIndexToString(idx);
+
+        //QModelIndex *retIdx = QModelIndexFromStr(v,  paramValues["ModelIndex"]);
+        QRect visR = v->visualRect(idx);
+        int dx = pos.x() - visR.x();
+        int dy = pos.y() - visR.y();
+        paramValues["dx"] = QString::number(dx);
+        paramValues["dy"] = QString::number(dy);
+        dataFilled = true;
+    }
+    else if(getTableView(obj) && getHeaderView(obj))
+    {
+        QHeaderView *hv = getHeaderView(obj);
+        int headerIndex = hv->logicalIndexAt(pos);
+        int secPos = hv->sectionViewportPosition(headerIndex);
+        int ho = hv->orientation();
+        paramValues["HeaderIndex"] = QString::number(headerIndex);
+        paramValues["HeaderOrientation"] = QString::number(ho);
+        if(ho==Qt::Horizontal)
+            paramValues["dx"] = QString::number(pos.x() - secPos);
+        else
+            paramValues["dy"] = QString::number(pos.y() - secPos);
+        dataFilled = true;
+    }
+    return dataFilled;
+}
+
 bool EventHandler::logEvent(QObject *obj, QEvent *event)
 {
     if(appState != RECORD_MODE) return false;
@@ -861,36 +918,7 @@ bool EventHandler::logEvent(QObject *obj, QEvent *event)
                 else if(getAbstractView(obj))
                 {
                     eventName = "MouseClick";
-                    QAbstractItemView *v = getAbstractView(obj);
-                    QModelIndex idx = v->indexAt(mEvent->pos());
-                    if(idx.isValid())
-                    {
-                        static bool useModelDataForTreeView = (toolOptions["USE_MODEL_DATA_FOR_TREE_VIEW"] == "true")?true:false;
-                        if(qobject_cast<QTreeView*>(v) && useModelDataForTreeView)
-                            paramValues["ModelData"] = QModelIndexToDataString(idx);
-                        else
-                            paramValues["ModelIndex"] = QModelIndexToString(idx);
-
-                        //QModelIndex *retIdx = QModelIndexFromStr(v,  paramValues["ModelIndex"]);
-                        QRect visR = v->visualRect(idx);
-                        int dx = mEvent->x() - visR.x();
-                        int dy = mEvent->y() - visR.y();
-                        paramValues["dx"] = QString::number(dx);
-                        paramValues["dy"] = QString::number(dy);
-                    }
-                    else if(getTableView(obj) && getHeaderView(obj))
-                    {
-                        QHeaderView *hv = getHeaderView(obj);
-                        int headerIndex = hv->logicalIndexAt(mEvent->pos());
-                        int secPos = hv->sectionViewportPosition(headerIndex);
-                        int ho = hv->orientation();
-                        paramValues["HeaderIndex"] = QString::number(headerIndex);
-                        paramValues["HeaderOrientation"] = QString::number(ho);
-                        if(ho==Qt::Horizontal)
-                            paramValues["dx"] = QString::number(mEvent->x() - secPos);
-                        else
-                            paramValues["dy"] = QString::number(mEvent->y() - secPos);
-                    }
+                    fillModelIndexInfoForViewEvents(obj, mEvent->pos(), paramValues);
                 }
                 else
                     eventName = "MouseClick";
@@ -921,6 +949,7 @@ bool EventHandler::logEvent(QObject *obj, QEvent *event)
             eventName = "QContextMenuEvent";
             {
             QContextMenuEvent *contextEvent = static_cast<QContextMenuEvent*>(event);
+            if(getAbstractView(obj)) fillModelIndexInfoForViewEvents(obj, QPoint(contextEvent->x(), contextEvent->y()), paramValues);
             paramValues["Reason"] = QString::number(contextEvent->reason());
             paramValues["X"] = QString::number(contextEvent->x());
             paramValues["Y"] = QString::number(contextEvent->y());
