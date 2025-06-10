@@ -18,6 +18,7 @@ class logViewWindow:public QObject{
     void logTreeData(QTreeView *v, QModelIndex idx = QModelIndex(), int currIdent = 0);
     void logTreeViewContents();
     void logTableViewContents();
+    void logListViewContents();
     public:
         void log(){}
         logViewWindow(const char *fileName);

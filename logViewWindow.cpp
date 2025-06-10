@@ -2,6 +2,7 @@
 #include "logViewWindow.h"
 #include <QTreeView>
 #include <QTableView>
+#include <QListView>
 #include <QCloseEvent>
 #include <QEvent>
 #include <QString>
@@ -19,6 +20,8 @@ logViewWindow::logViewWindow(const char *fileName):outFile(fileName){
     ui->setupUi(loggerWindow);
     loggerWindow->setWindowFlags(Qt::WindowStaysOnTopHint);
     connect(ui->logViewsBtn, SIGNAL(clicked()), this, SLOT(logBtnClicked()));
+    //loggerWindow->setWindowFlags(loggerWindow->windowFlags() | Qt::Window);
+    //loggerWindow->setWindowModality(Qt::NonModal);
     loggerWindow->show();
     //ui->show();
 }
@@ -33,6 +36,8 @@ void logViewWindow::setCurrentView(QAbstractItemView* v){
             type = "Tree View";
         else if(qobject_cast<QTableView*>(currentView))
             type = "Table View";
+        else if(qobject_cast<QListView*>(currentView))
+            type = "List View";
         else
             type = "Unknown";
     }
@@ -42,6 +47,8 @@ void logViewWindow::setCurrentView(QAbstractItemView* v){
         ui->logViewsBtn->setEnabled(false);
     ui->nameTextBox->setText(name);
     ui->typeTextBox->setText(type);
+    loggerWindow->raise();
+    loggerWindow->activateWindow();
 }  
           
 logViewWindow::~logViewWindow()
@@ -118,9 +125,30 @@ void logViewWindow::logTableViewContents()
         }
         outFile<<"\n";
     }
-
 }
 
+void logViewWindow::logListViewContents()
+{
+    QListView *listV = qobject_cast<QListView*>(currentView);
+    QAbstractItemModel *m = listV->model();
+    if(!m) return;
+    int rows = m->rowCount();
+    //int cols = m->columnCount();    
+    //Add header columns as well
+    for(int i=0; i<rows; ++i)
+    {
+        if(listV->isRowHidden(i)) continue;
+        //for(int j=0; j<cols; ++j)
+       // {
+            //if(tableV->isColumnHidden(j)) continue;
+            //if(colPrinted) outFile<<" | ";
+            QString data = m->index(i, 0, QModelIndex()).data().toString();
+            outFile<<qPrintable(data);
+            //colPrinted = true;
+       // }
+        outFile<<"\n";
+    }
+}
 void logViewWindow::logBtnClicked()
 {
     if(currentView)
@@ -132,6 +160,8 @@ void logViewWindow::logBtnClicked()
             logTreeViewContents();
         else if(qobject_cast<QTableView*>(currentView))
             logTableViewContents();
+        else if(qobject_cast<QListView*>(currentView))
+            logListViewContents();
         outFile<<"\n========================================\n";
     }
 

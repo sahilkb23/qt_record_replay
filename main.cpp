@@ -36,7 +36,8 @@ const char *logFileEnv = "LOG_QT_SO";
 const char *optionsAndValuesEnv = "RR_QT_GUI_OPTIONS";
 
 std::unordered_map<std::string, std::string> toolOptions = {
-    {"USE_MODEL_DATA_FOR_TREE_VIEW","false"},
+    {"USE_MODEL_DATA_FOR_TREE_VIEW","true"},
+    {"USE_MODEL_DATA_FOR_LIST_VIEW","true"},
     {"SHOW_IGNORED_EVENTS","false"}
 };
 
@@ -192,8 +193,9 @@ void QObjInfo::readFromFile(std::istream& in, int lineN)
     //objectProperties = values[4];
     for(int i = 4; i<values.size(); ++i)
     {
-        if(values[i].length()==0) continue;
-        QStringList keyVal = values[i].split("=");
+        QString value = values[i].trimmed();
+        if(value.length()==0) continue;
+        QStringList keyVal = value.split("=");
         if(keyVal.size() == 1) 
             objectProperties[keyVal[0]] = "";
         else if(keyVal.size() != 2) continue; //Error?
@@ -773,7 +775,10 @@ bool fillModelIndexInfoForViewEvents(QObject *obj, QPoint pos, std::map<QString,
     if(idx.isValid())
     {
         static bool useModelDataForTreeView = (toolOptions["USE_MODEL_DATA_FOR_TREE_VIEW"] == "true")?true:false;
+        static bool useModelDataForListView = (toolOptions["USE_MODEL_DATA_FOR_LIST_VIEW"] == "true")?true:false;
         if(qobject_cast<QTreeView*>(v) && useModelDataForTreeView)
+            paramValues["ModelData"] = QModelIndexToDataString(idx);
+        else if(qobject_cast<QListView*>(v) && useModelDataForListView)
             paramValues["ModelData"] = QModelIndexToDataString(idx);
         else
             paramValues["ModelIndex"] = QModelIndexToString(idx);
